@@ -289,10 +289,21 @@ struct SSHKeyExchangeStateMachine {
         case .keyExchangeInitSent(exchange: var exchanger, let negotiated):
             switch self.role {
             case .client:
-                guard message.hostKey.keyPrefix.elementsEqual(negotiated.negotiatedHostKeyAlgorithm.utf8) else {
+                guard message.hostKey.signs(under: negotiated.negotiatedHostKeyAlgorithm.utf8) else {
                     throw NIOSSHError.invalidHostKeyForKeyExchange(
                         expected: negotiated.negotiatedHostKeyAlgorithm,
                         got: message.hostKey.keyPrefix
+                    )
+                }
+
+                // An RSA key signs under several algorithms, so the key matching is not
+                // enough: the signature has to be the algorithm that was negotiated too.
+                if let signatureAlgorithm = message.signature.rsaSignatureAlgorithm,
+                    !signatureAlgorithm.wireBytes.elementsEqual(negotiated.negotiatedHostKeyAlgorithm.utf8)
+                {
+                    throw NIOSSHError.invalidHostKeyForKeyExchange(
+                        expected: negotiated.negotiatedHostKeyAlgorithm,
+                        got: signatureAlgorithm.wireBytes
                     )
                 }
 
@@ -603,6 +614,7 @@ extension SSHKeyExchangeStateMachine {
     /// All known host key algorithms.
     static let supportedServerHostKeyAlgorithms: [Substring] = [
         "ssh-ed25519", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp521",
+        "rsa-sha2-512", "rsa-sha2-256",
     ]
 }
 

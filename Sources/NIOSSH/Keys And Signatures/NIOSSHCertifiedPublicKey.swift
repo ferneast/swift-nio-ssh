@@ -359,6 +359,8 @@ extension NIOSSHCertifiedPublicKey {
             return Self.p384KeyPrefix
         case .ecdsaP521:
             return Self.p521KeyPrefix
+        case .rsa:
+            preconditionFailure("base key cannot be an RSA key")
         case .certified:
             preconditionFailure("base key cannot be certified")
         }
@@ -474,6 +476,9 @@ extension NIOSSHCertifiedPublicKey {
                 if case .certified = newValue.backingKey {
                     preconditionFailure("Certificate may not use certified key as public key")
                 }
+                if case .rsa = newValue.backingKey {
+                    preconditionFailure("Certificate may not use RSA key as public key")
+                }
             }
         }
 
@@ -514,6 +519,10 @@ extension NIOSSHCertifiedPublicKey {
             }
             if case .certified = signatureKey.backingKey {
                 throw NIOSSHError.invalidCertificate(diagnostics: "Certificate may not be signed by certified key")
+            }
+            // The certificate formats this library reads and writes have no RSA member.
+            if case .rsa = key.backingKey {
+                throw NIOSSHError.invalidCertificate(diagnostics: "Certificate may not use RSA key as public key")
             }
 
             self.nonce = nonce

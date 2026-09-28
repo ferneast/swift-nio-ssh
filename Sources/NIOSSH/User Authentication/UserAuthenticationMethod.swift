@@ -203,14 +203,27 @@ extension NIOSSHUserAuthenticationOffer.Offer {
         /// This is sent to the server.
         public var publicKey: NIOSSHPublicKey
 
-        public init(privateKey: NIOSSHPrivateKey) {
+        /// The algorithm an RSA key signs this offer with. It has no meaning for any other key.
+        ///
+        /// A server may accept some of these algorithms and not others, and says which
+        /// only by failing the offer, so a client that holds an RSA key may have to offer
+        /// it once per algorithm.
+        public var rsaSignatureAlgorithm: RSASignatureAlgorithm
+
+        public init(privateKey: NIOSSHPrivateKey, rsaSignatureAlgorithm: RSASignatureAlgorithm = .sha512) {
             self.privateKey = privateKey
             self.publicKey = privateKey.publicKey
+            self.rsaSignatureAlgorithm = rsaSignatureAlgorithm
         }
 
-        public init(privateKey: NIOSSHPrivateKey, certifiedKey: NIOSSHCertifiedPublicKey) {
+        public init(
+            privateKey: NIOSSHPrivateKey,
+            certifiedKey: NIOSSHCertifiedPublicKey,
+            rsaSignatureAlgorithm: RSASignatureAlgorithm = .sha512
+        ) {
             self.privateKey = privateKey
             self.publicKey = NIOSSHPublicKey(certifiedKey)
+            self.rsaSignatureAlgorithm = rsaSignatureAlgorithm
         }
     }
 
@@ -242,14 +255,18 @@ extension SSHMessage.UserAuthRequestMessage {
 
         switch request.offer {
         case .privateKey(let privateKeyRequest):
+            let rsaAlgorithm = privateKeyRequest.rsaSignatureAlgorithm
             let dataToSign = UserAuthSignablePayload(
                 sessionIdentifier: sessionID,
                 userName: self.username,
                 serviceName: self.service,
-                publicKey: privateKeyRequest.publicKey
+                publicKey: privateKeyRequest.publicKey,
+                rsaSignatureAlgorithm: rsaAlgorithm
             )
-            let signature = try privateKeyRequest.privateKey.sign(dataToSign)
-            self.method = .publicKey(.known(key: privateKeyRequest.publicKey, signature: signature))
+            let signature = try privateKeyRequest.privateKey.sign(dataToSign, rsaSignatureAlgorithm: rsaAlgorithm)
+            self.method = .publicKey(
+                .known(key: privateKeyRequest.publicKey, signature: signature, rsaSignatureAlgorithm: rsaAlgorithm)
+            )
         case .password(let passwordRequest):
             self.method = .password(passwordRequest.password)
         case .hostBased:
