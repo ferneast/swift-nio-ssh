@@ -501,6 +501,9 @@ extension ByteBuffer {
         return NIOSSHPublicKey(backingKey: .ecdsaP521(key))
     }
 
+    /// The smallest RSA key a peer may present, which is the smallest OpenSSH takes.
+    private static let minimumRSAKeySizeInBits = 1024
+
     /// A helper function that reads an RSA public key.
     ///
     /// Not safe to call from arbitrary code as this does not return the reader index on failure: it relies on the caller performing
@@ -516,6 +519,9 @@ extension ByteBuffer {
             n: Data(nBytes.mpIntView),
             e: Data(eBytes.mpIntView)
         )
+        guard key.keySizeInBits >= Self.minimumRSAKeySizeInBits else {
+            throw NIOSSHError.invalidDomainParametersForKey(parameters: "rsa-\(key.keySizeInBits)")
+        }
         return NIOSSHPublicKey(backingKey: .rsa(key))
     }
 

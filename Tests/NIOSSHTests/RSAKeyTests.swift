@@ -163,6 +163,18 @@ final class RSAKeyTests: XCTestCase {
         XCTAssertEqual(parsed, self.sshKey.publicKey)
     }
 
+    func testPublicKeyOfFewerThan1024BitsIsNotRead() throws {
+        var buffer = ByteBufferAllocator().buffer(capacity: 1024)
+        buffer.writeSSHString("ssh-rsa".utf8)
+        buffer.writeSSHString([0x01, 0x00, 0x01])
+        // A modulus of 512 bits: the leading zero keeps it positive.
+        buffer.writeSSHString([0x00] + Array(repeating: UInt8(0xC7), count: 64))
+
+        XCTAssertThrowsError(try buffer.readSSHHostKey()) { error in
+            XCTAssertEqual((error as? NIOSSHError)?.type, .invalidDomainParametersForKey)
+        }
+    }
+
     func testPublicKeySignsUnderTheSHA2AlgorithmsOnly() throws {
         let publicKey = self.sshKey.publicKey
 
