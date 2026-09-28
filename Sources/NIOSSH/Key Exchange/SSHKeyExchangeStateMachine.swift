@@ -411,8 +411,14 @@ struct SSHKeyExchangeStateMachine {
 
         // Ok, now we need to find the right transport protection scheme. This can technically fail.
         guard
-            let scheme = self.protectionSchemes.first(where: {
-                $0.cipherName == clientEncryption && ($0.macName == nil || $0.macName! == clientMAC)
+            let scheme = self.protectionSchemes.first(where: { scheme in
+                guard scheme.cipherName == clientEncryption else {
+                    return false
+                }
+                guard let macName = scheme.macName else {
+                    return true
+                }
+                return clientMAC.map { $0 == macName } ?? false
             })
         else {
             throw NIOSSHError.keyExchangeNegotiationFailure
@@ -498,7 +504,7 @@ struct SSHKeyExchangeStateMachine {
     private func negotiatedTransportProtection(
         peerEncryptionAlgorithms: [Substring],
         peerMacAlgorithms: [Substring]
-    ) throws -> (encryption: Substring, mac: Substring) {
+    ) throws -> (encryption: Substring, mac: Substring?) {
         // Ok, rephrase as client and server instead of us and them.
         let clientEncryptionAlgorithms: [Substring]
         let serverEncryptionAlgorithms: [Substring]
@@ -523,6 +529,13 @@ struct SSHKeyExchangeStateMachine {
         guard let encryption = clientEncryptionAlgorithms.first(where: { serverEncryptionAlgorithms.contains($0) })
         else {
             throw NIOSSHError.keyExchangeNegotiationFailure
+        }
+
+        // A cipher that authenticates its own packets leaves the negotiated MAC unused, so
+        // the two MAC lists having nothing in common is no reason to fail. A peer that
+        // offers only MACs this side lacks is still reachable through such a cipher.
+        if self.protectionSchemes.contains(where: { $0.cipherName == encryption && $0.macName == nil }) {
+            return (encryption, nil)
         }
 
         // Ok great, now work out what we negotiated as a MAC.
